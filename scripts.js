@@ -1,6 +1,7 @@
 // API key for DoodStream
 const API_KEY = '449386ekfnkwg9s3xe5nhz';
 const API_BASE_URL = 'https://doodapi.com/api';
+const CORS_PROXY = 'https://cors-anywhere.herokuapp.com/';
 
 // Variables for pagination and sorting
 let currentPage = 1;
@@ -38,42 +39,49 @@ function initializeElements() {
 
 // Function to load videos from DoodStream API
 async function loadVideos(isLoadMore = false) {
-  console.log("Loading videos - Genre:", currentGenre, "Order:", currentSortMethod);
-  if (!videoList) {
-      console.error("videoList is not defined");
-      return;
-  }
-  
-  if (!isLoadMore) {
-      videoList.innerHTML = "";
-      currentPage = 1;
-  }
+    console.log("Loading videos - Genre:", currentGenre, "Order:", currentSortMethod);
+    if (!videoList) {
+        console.error("videoList is not defined");
+        return;
+    }
+    
+    if (!isLoadMore) {
+        videoList.innerHTML = "";
+        currentPage = 1;
+    }
 
-  try {
-      const url = `${API_BASE_URL}/file/list?key=${API_KEY}&page=${currentPage}&per_page=${pageSize}`;
-      const response = await fetch(url);
-      const data = await response.json();
+    try {
+        const url = `${CORS_PROXY}${API_BASE_URL}/file/list?key=${API_KEY}&page=${currentPage}&per_page=${pageSize}`;
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
 
-      if (data.status !== 200 || !data.result || data.result.files.length === 0) {
-          console.log("No videos found");
-          if (!isLoadMore) {
-              videoList.innerHTML = `<p>No videos found for the genre: ${currentGenre}.</p>`;
-          }
-          loadMoreButton.style.display = 'none';
-      } else {
-          data.result.files.forEach((file) => {
-              const videoContainer = createVideoCard(file);
-              videoList.appendChild(videoContainer);
-          });
-          loadMoreButton.style.display = 'block';
-      }
-  } catch (error) {
-      console.error("Error loading videos:", error);
-      videoList.innerHTML += "<p>Error loading videos. Please try again later.</p>";
-  }
+        if (data.status !== 200 || !data.result || data.result.files.length === 0) {
+            console.log("No videos found");
+            if (!isLoadMore) {
+                videoList.innerHTML = `<p>No videos found for the genre: ${currentGenre}.</p>`;
+            }
+            loadMoreButton.style.display = 'none';
+        } else {
+            data.result.files.forEach((file) => {
+                const videoContainer = createVideoCard(file);
+                videoList.appendChild(videoContainer);
+            });
+            loadMoreButton.style.display = 'block';
+        }
+    } catch (error) {
+        console.error("Error loading videos:", error);
+        videoList.innerHTML += "<p>Error loading videos. Please try again later.</p>";
+        loadMoreButton.style.display = 'none';
+    }
 
-  lazyLoadImages();
+    lazyLoadImages();
 }
+
 // Function to create a video card element
 function createVideoCard(videoData) {
     console.log("Creating card for:", videoData.title);
@@ -188,8 +196,13 @@ async function performSearch() {
     currentPage = 1; // Reset pagination
 
     try {
-        const url = `${API_BASE_URL}/search/videos?key=${API_KEY}&search_term=${encodeURIComponent(searchQuery)}`;
+        const url = `${CORS_PROXY}${API_BASE_URL}/search/videos?key=${API_KEY}&search_term=${encodeURIComponent(searchQuery)}`;
         const response = await fetch(url);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
         const data = await response.json();
 
         if (data.status !== 200 || !data.result || data.result.length === 0) {
@@ -238,7 +251,10 @@ document.addEventListener('DOMContentLoaded', (event) => {
     initializeElements();
     setupEventListeners();
     updateSortButtons(); // Update sort buttons on start
-    loadVideos();
+    loadVideos().catch(error => {
+        console.error("Failed to load videos:", error);
+        videoList.innerHTML = "<p>Failed to load videos. Please check your internet connection and try again later.</p>";
+    });
 
     // Add ripple effect to all buttons
     const buttons = document.getElementsByTagName("button");
