@@ -38,43 +38,42 @@ function initializeElements() {
 
 // Function to load videos from DoodStream API
 async function loadVideos(isLoadMore = false) {
-    console.log("Loading videos - Genre:", currentGenre, "Order:", currentSortMethod);
-    if (!videoList) {
-        console.error("videoList is not defined");
-        return;
-    }
-    
-    if (!isLoadMore) {
-        videoList.innerHTML = "";
-        currentPage = 1;
-    }
+  console.log("Loading videos - Genre:", currentGenre, "Order:", currentSortMethod);
+  if (!videoList) {
+      console.error("videoList is not defined");
+      return;
+  }
+  
+  if (!isLoadMore) {
+      videoList.innerHTML = "";
+      currentPage = 1;
+  }
 
-    try {
-        const url = `${API_BASE_URL}/file/list?key=${API_KEY}&page=${currentPage}&per_page=${pageSize}`;
-        const response = await fetch(url);
-        const data = await response.json();
+  try {
+      const url = `${API_BASE_URL}/file/list?key=${API_KEY}&page=${currentPage}&per_page=${pageSize}`;
+      const response = await fetch(url);
+      const data = await response.json();
 
-        if (data.status !== 200 || !data.result || data.result.files.length === 0) {
-            console.log("No videos found");
-            if (!isLoadMore) {
-                videoList.innerHTML = `<p>No videos found for the genre: ${currentGenre}.</p>`;
-            }
-            loadMoreButton.style.display = 'none';
-        } else {
-            data.result.files.forEach((file) => {
-                const videoContainer = createVideoCard(file);
-                videoList.appendChild(videoContainer);
-            });
-            loadMoreButton.style.display = 'block';
-        }
-    } catch (error) {
-        console.error("Error loading videos:", error);
-        videoList.innerHTML += "<p>Error loading videos. Please try again later.</p>";
-    }
+      if (data.status !== 200 || !data.result || data.result.files.length === 0) {
+          console.log("No videos found");
+          if (!isLoadMore) {
+              videoList.innerHTML = `<p>No videos found for the genre: ${currentGenre}.</p>`;
+          }
+          loadMoreButton.style.display = 'none';
+      } else {
+          data.result.files.forEach((file) => {
+              const videoContainer = createVideoCard(file);
+              videoList.appendChild(videoContainer);
+          });
+          loadMoreButton.style.display = 'block';
+      }
+  } catch (error) {
+      console.error("Error loading videos:", error);
+      videoList.innerHTML += "<p>Error loading videos. Please try again later.</p>";
+  }
 
-    lazyLoadImages();
+  lazyLoadImages();
 }
-console.log("API Response:", data);
 // Function to create a video card element
 function createVideoCard(videoData) {
     console.log("Creating card for:", videoData.title);
