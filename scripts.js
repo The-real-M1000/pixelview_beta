@@ -1,53 +1,21 @@
-// Importar Firebase y Firestore desde el CDN
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
-import { getFirestore, collection, setDoc, doc, getDocs, query, where, orderBy, limit, startAfter } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+// Configuración de la API de DoodStream
+const API_KEY = '449386ekfnkwg9s3xe5nhz';
+const BASE_URL = 'https://doodapi.com/api';
 
-// Configuración de Firebase
-const firebaseConfig = {
-    apiKey: "AIzaSyAmHL0-1uJZgPAhxqDN4zA1uXH-X6YtzY",
-    authDomain: "pixelview-30.firebaseapp.com",
-    projectId: "pixelview-30",
-    storageBucket: "pixelview-30.appspot.com",
-    messagingSenderId: "267067796738",
-    appId: "1:267067796738:web:cadd6fd09b25f94fb5661b",
-    measurementId: "G-4VPZX8PV0N"
-};
-
-// Inicializa Firebase
-const app = initializeApp(firebaseConfig);
-
-// Inicializa Firestore
-const db = getFirestore(app);
-console.log("Firebase inicializado correctamente");
+// Variables para la paginación y ordenación
+let currentPage = 1;
+let currentGenre = 'all';
+let currentSortMethod = 'date';
+const pageSize = 20;
 
 // Referencias a elementos del DOM
 let videoList;
 let genereButtons;
 let searchInput;
 let searchButton;
-let videoForm;
 let loadMoreButton;
 let sortAlphabeticallyButton;
 let sortByDateButton;
-
-// Variables para la paginación y ordenación
-let lastVisible = null;
-const pageSize = 20;
-let currentGenre = 'all';
-let currentSortMethod = 'date';
-let currentPage = 1;
-
-// Función para normalizar el texto del género
-function normalizeGenre(genre) {
-    return genre.toLowerCase()
-                .replace(/\s+/g, '-')
-                .replace(/á/g, 'a')
-                .replace(/é/g, 'e')
-                .replace(/í/g, 'i')
-                .replace(/ó/g, 'o')
-                .replace(/ú/g, 'u')
-                .replace(/ñ/g, 'n');
-}
 
 // Función para inicializar elementos del DOM
 function initializeElements() {
@@ -55,7 +23,6 @@ function initializeElements() {
     genereButtons = document.getElementById('genereButtons');
     searchInput = document.getElementById('search-bar');
     searchButton = document.getElementById('search-button');
-    videoForm = document.getElementById('videoForm');
     loadMoreButton = document.getElementById('loadMoreButton');
     sortAlphabeticallyButton = document.querySelector('.sort-buttons button:first-child');
     sortByDateButton = document.querySelector('.sort-buttons button:last-child');
@@ -64,79 +31,13 @@ function initializeElements() {
     if (!genereButtons) console.error("Elemento 'genereButtons' no encontrado");
     if (!searchInput) console.error("Elemento 'searchInput' no encontrado");
     if (!searchButton) console.error("Elemento 'searchButton' no encontrado");
-    if (!videoForm) console.error("Elemento 'videoForm' no encontrado");
     if (!loadMoreButton) console.error("Elemento 'loadMoreButton' no encontrado");
     if (!sortAlphabeticallyButton) console.error("Elemento 'sortAlphabetically' no encontrado");
     if (!sortByDateButton) console.error("Elemento 'sortByDate' no encontrado");
 }
 
-// Función para validar el formulario
-function validateForm() {
-    const title = document.getElementById("videoTitle").value;
-    const url = document.getElementById("videoUrl").value;
-    const imageUrl = document.getElementById("imageUrl").value;
-    
-    if (!title || !url || !imageUrl) {
-        alert("Por favor, rellena todos los campos");
-        return false;
-    }
-    
-    if (!isValidUrl(url) || !isValidUrl(imageUrl)) {
-        alert("Por favor, introduce URLs válidas");
-        return false;
-    }
-    
-    return true;
-}
-
-function isValidUrl(string) {
-    try {
-        new URL(string);
-        return true;
-    } catch (_) {
-        return false;  
-    }
-}
-
-// Función para subir video
-function setupVideoForm() {
-    if (videoForm) {
-        videoForm.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            if (!validateForm()) return;
-
-            const videoTitle = document.getElementById("videoTitle").value;
-            const videoUrl = document.getElementById("videoUrl").value;
-            const imageUrl = document.getElementById("imageUrl").value;
-            const videoType = document.getElementById("videoType").value;
-            const videoGenere = normalizeGenre(document.getElementById("videoGenere").value);
-
-            try {
-                const docId = videoTitle.toLowerCase().replace(/\s+/g, '-');
-                await setDoc(doc(db, "videos", docId), {
-                    title: videoTitle,
-                    videoUrl: videoUrl,
-                    imageUrl: imageUrl,
-                    type: videoType,
-                    genere: videoGenere,
-                    uploadDate: new Date().toISOString()
-                });
-
-                console.log("Video subido con género:", videoGenere);
-                alert("Video subido correctamente");
-                loadVideos();
-                videoForm.reset();
-            } catch (error) {
-                console.error("Error al subir el video: ", error);
-                alert("Error al subir el video. Por favor, intenta de nuevo.");
-            }
-        });
-    }
-}
-
 // Función para cargar y mostrar videos
 async function loadVideos(isLoadMore = false) {
-    console.log("Cargando videos - Género:", currentGenre, "Orden:", currentSortMethod);
     if (!videoList) {
         console.error("videoList no está definido");
         return;
@@ -144,44 +45,29 @@ async function loadVideos(isLoadMore = false) {
     
     if (!isLoadMore) {
         videoList.innerHTML = "";
-        lastVisible = null;
         currentPage = 1;
     }
 
     try {
-        let videosQuery = collection(db, "videos");
+        const response = await fetch(`${BASE_URL}/file/list?key=${API_KEY}&page=${currentPage}&per_page=${pageSize}`);
+        const data = await response.json();
 
-        if (currentGenre !== 'all') {
-            videosQuery = query(videosQuery, where("genere", "==", currentGenre));
+        if (data.status !== 200) {
+            throw new Error(data.msg || 'Error al cargar los videos');
         }
 
-        if (currentSortMethod === 'alphabetical') {
-            videosQuery = query(videosQuery, orderBy("title"));
-        } else {
-            videosQuery = query(videosQuery, orderBy("uploadDate", "desc"));
-        }
+        const videos = data.result.files;
 
-        videosQuery = query(videosQuery, limit(pageSize));
-
-        if (lastVisible) {
-            videosQuery = query(videosQuery, startAfter(lastVisible));
-        }
-
-        const querySnapshot = await getDocs(videosQuery);
-        if (querySnapshot.empty) {
-            console.log("No se encontraron videos");
+        if (videos.length === 0) {
             if (!isLoadMore) {
-                videoList.innerHTML = `<p>No se encontraron videos para el género: ${currentGenre}.</p>`;
+                videoList.innerHTML = `<p>No se encontraron videos.</p>`;
             }
             loadMoreButton.style.display = 'none';
         } else {
-            querySnapshot.forEach((doc) => {
-                const videoData = doc.data();
-                console.log("Video cargado:", videoData);
-                const videoContainer = createVideoCard(videoData);
+            videos.forEach((video) => {
+                const videoContainer = createVideoCard(video);
                 videoList.appendChild(videoContainer);
             });
-            lastVisible = querySnapshot.docs[querySnapshot.docs.length - 1];
             loadMoreButton.style.display = 'block';
         }
     } catch (error) {
@@ -194,7 +80,6 @@ async function loadVideos(isLoadMore = false) {
 
 // Función para crear un elemento de tarjeta de video
 function createVideoCard(videoData) {
-    console.log("Creando tarjeta para:", videoData.title);
     const videoContainer = document.createElement("div");
     videoContainer.className = 'movie';
     videoContainer.setAttribute('tabindex', '0');
@@ -204,13 +89,13 @@ function createVideoCard(videoData) {
     const safeTitle = sanitizeInput(videoData.title);
     videoContainer.innerHTML = `
         <div class="image-container">
-            <img src="placeholder.jpg" data-src="${videoData.imageUrl}" alt="${safeTitle}" loading="lazy">
+            <img src="placeholder.jpg" data-src="${videoData.splash_img}" alt="${safeTitle}" loading="lazy">
         </div>
         <h2 class="title">${safeTitle}</h2>
-        <div class="info">${videoData.type} - ${videoData.genere}</div>
+        <div class="info">Vistas: ${videoData.views}</div>
     `;
     videoContainer.addEventListener('click', () => {
-        window.open(videoData.videoUrl, '_blank');
+        window.open(videoData.protected_embed, '_blank');
     });
 
     return videoContainer;
@@ -259,16 +144,8 @@ function setupGenreAndSortButtons() {
         genreButtons.forEach(button => {
             button.addEventListener('click', () => {
                 let selectedGenre = button.textContent;
-                console.log("Género seleccionado (original):", selectedGenre);
-                
-                if (selectedGenre.toLowerCase() === 'todos') {
-                    currentGenre = 'all';
-                } else {
-                    currentGenre = normalizeGenre(selectedGenre);
-                }
-                
-                console.log("Género normalizado:", currentGenre);
-                lastVisible = null; // Resetear la paginación
+                currentGenre = selectedGenre.toLowerCase() === 'todos' ? 'all' : selectedGenre.toLowerCase();
+                currentPage = 1;
                 loadVideos();
 
                 genreButtons.forEach(btn => btn.classList.remove('active'));
@@ -281,14 +158,14 @@ function setupGenreAndSortButtons() {
         sortAlphabeticallyButton.addEventListener('click', () => {
             currentSortMethod = 'alphabetical';
             updateSortButtons();
-            lastVisible = null; // Resetear la paginación
+            currentPage = 1;
             loadVideos();
         });
 
         sortByDateButton.addEventListener('click', () => {
             currentSortMethod = 'date';
             updateSortButtons();
-            lastVisible = null; // Resetear la paginación
+            currentPage = 1;
             loadVideos();
         });
     }
@@ -303,52 +180,31 @@ async function performSearch() {
 
     const searchQuery = searchInput.value.toLowerCase();
     videoList.innerHTML = "";
-    lastVisible = null; // Resetear la paginación
-
-    let videosQuery = collection(db, "videos");
-    videosQuery = query(videosQuery, orderBy("title"));
+    currentPage = 1;
 
     try {
-        const querySnapshot = await getDocs(videosQuery);
-        let resultsFound = false;
-        
-        querySnapshot.forEach((doc) => {
-            const videoData = doc.data();
-            if (videoData.title.toLowerCase().includes(searchQuery)) {
-                const videoContainer = createVideoCard(videoData);
-                videoList.appendChild(videoContainer);
-                resultsFound = true;
-            }
-        });
+        const response = await fetch(`${BASE_URL}/search/videos?key=${API_KEY}&search_term=${encodeURIComponent(searchQuery)}`);
+        const data = await response.json();
 
-        if (!resultsFound) {
+        if (data.status !== 200) {
+            throw new Error(data.msg || 'Error al realizar la búsqueda');
+        }
+
+        const videos = data.result;
+
+        if (videos.length === 0) {
             videoList.innerHTML = "<p>No se encontraron resultados para la búsqueda.</p>";
+        } else {
+            videos.forEach((video) => {
+                const videoContainer = createVideoCard(video);
+                videoList.appendChild(videoContainer);
+            });
         }
         loadMoreButton.style.display = 'none'; // Ocultar el botón en búsquedas
     } catch (error) {
         console.error("Error al realizar la búsqueda:", error);
         videoList.innerHTML = "<p>Error al realizar la búsqueda. Por favor, intenta de nuevo más tarde.</p>";
     }
-}
-
-// Función para crear el efecto ripple en los botones
-function createRipple(event) {
-    const button = event.currentTarget;
-    const circle = document.createElement("span");
-    const diameter = Math.max(button.clientWidth, button.clientHeight);
-    const radius = diameter / 2;
-
-    circle.style.width = circle.style.height = `${diameter}px`;
-    circle.style.left = `${event.clientX - button.offsetLeft - radius}px`;
-    circle.style.top = `${event.clientY - button.offsetTop - radius}px`;
-    circle.classList.add("ripple");
-
-    const ripple = button.getElementsByClassName("ripple")[0];
-    if (ripple) {
-        ripple.remove();
-    }
-
-    button.appendChild(circle);
 }
 
 // Función para implementar lazy loading de imágenes
@@ -380,14 +236,7 @@ function lazyLoadImages() {
 document.addEventListener('DOMContentLoaded', (event) => {
     console.log("DOM completamente cargado y parseado");
     initializeElements();
-    setupVideoForm();
     setupEventListeners();
-    updateSortButtons(); // Actualizar los botones de ordenación al inicio
+    updateSortButtons();
     loadVideos();
-
-    // Añadir efecto ripple a todos los botones
-    const buttons = document.getElementsByTagName("button");
-    for (const button of buttons) {
-        button.addEventListener("click", createRipple);
-    }
 });
