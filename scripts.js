@@ -74,7 +74,7 @@ async function loadVideos(isLoadMore = false) {
 
     lazyLoadImages();
 }
-
+console.log("API Response:", data);
 // Function to create a video card element
 function createVideoCard(videoData) {
     console.log("Creating card for:", videoData.title);
