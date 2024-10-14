@@ -14,7 +14,7 @@ let currentSortMethod = 'date';
 let currentPage = 1;
 
 // Configuración de la API
-const apiKey = "https://dood.li/e/eqfz49mnny89";
+const apiKey = "33348pe44srbegab60xwl"; // Reemplaza esto con tu clave API real
 const apiBaseUrl = "https://api.vidhide.com";
 
 // Función para inicializar elementos del DOM
@@ -58,18 +58,21 @@ async function loadVideos(isLoadMore = false) {
         }
         const data = await response.json();
 
-        if (data.videos.length === 0) {
+        if (data.videos && data.videos.length === 0) {
             console.log("No se encontraron videos");
             if (!isLoadMore) {
                 videoList.innerHTML = `<p>No se encontraron videos para el género: ${currentGenre}.</p>`;
             }
             loadMoreButton.style.display = 'none';
-        } else {
+        } else if (data.videos) {
             data.videos.forEach((video) => {
                 const videoContainer = createVideoCard(video);
                 videoList.appendChild(videoContainer);
             });
             loadMoreButton.style.display = 'block';
+        } else {
+            console.error("Formato de respuesta inesperado:", data);
+            videoList.innerHTML += "<p>Error al procesar la respuesta del servidor.</p>";
         }
     } catch (error) {
         console.error("Error al cargar videos:", error);
@@ -94,10 +97,10 @@ function createVideoCard(videoData) {
             <img src="placeholder.jpg" data-src="${videoData.thumbnail}" alt="${safeTitle}" loading="lazy">
         </div>
         <h2 class="title">${safeTitle}</h2>
-        <div class="info">${videoData.duration} - ${videoData.category}</div>
+        <div class="info">${videoData.duration || 'N/A'} - ${videoData.category || 'Sin categoría'}</div>
     `;
     videoContainer.addEventListener('click', () => {
-        window.open(videoData.embed_url, '_blank');
+        window.open(videoData.embed_url || videoData.url, '_blank');
     });
 
     return videoContainer;
@@ -194,15 +197,18 @@ async function performSearch() {
         }
         const data = await response.json();
 
-        if (data.videos.length === 0) {
+        if (data.videos && data.videos.length === 0) {
             videoList.innerHTML = "<p>No se encontraron resultados para la búsqueda.</p>";
             loadMoreButton.style.display = 'none';
-        } else {
+        } else if (data.videos) {
             data.videos.forEach((video) => {
                 const videoContainer = createVideoCard(video);
                 videoList.appendChild(videoContainer);
             });
             loadMoreButton.style.display = 'block';
+        } else {
+            console.error("Formato de respuesta inesperado:", data);
+            videoList.innerHTML = "<p>Error al procesar la respuesta del servidor.</p>";
         }
     } catch (error) {
         console.error("Error al realizar la búsqueda:", error);
