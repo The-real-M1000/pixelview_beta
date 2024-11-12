@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PixelView - Detalles de Película</title>
+    <link rel="stylesheet" href="movie.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <a href="index.html" class="logo">PixelView</a>
+            <nav>
+                <a href="index.html" class="nav-button">Inicio</a>
+                <button class="nav-button">Donar</button>
+                <button class="nav-button">Canal de WhatsApp</button>
+                <a href="contacto.html" class="nav-button">Contacto y soporte</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="movie-detail-container">
+        <main class="movie-content">
+            <section class="video-section">
+                <div id="player-container">
+                    <video id="torrent-video" controls playsinline></video>
+                    <div id="player-overlay">
+                        <div class="loading-spinner"></div>
+                        <div id="status-info"></div>
+                        <div id="torrent-stats">
+                            <span id="download-speed"></span>
+                            <span id="peers-count"></span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="movie-details">
+                <h1 id="movieTitle"></h1>
+                
+                <div class="movie-info-container">
+                    <img id="moviePoster" src="/assets/placeholder.jpg" alt="Movie poster" class="movie-poster">
+                    <div class="movie-metadata">
+                        <!-- Los metadatos se insertarán aquí mediante JavaScript -->
+                    </div>
+                </div>
+
+                <div id="movieDescription">
+                    <!-- La descripción se insertará aquí mediante JavaScript -->
+                </div>
+            </section>
+        </main>
+
+        <aside class="recommended-movies">
+            <h2>Películas recomendadas</h2>
+            <div id="recommendedMovies" class="recommended-grid">
+                <!-- Las películas recomendadas se insertarán aquí mediante JavaScript -->
+            </div>
+        </aside>
+    </div>
+
+    <script type="module" src="movie-detail.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
+</body>
+</html>
