@@ -54,15 +54,16 @@ function secureIframe(videoUrl) {
     const iframe = doc.querySelector('iframe');
     
     if (iframe) {
-        // Añadir atributos de seguridad
-        iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
+        // Añadir atributos de seguridad con permisos necesarios para reproducción
+        iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-presentation allow-popups-to-escape-sandbox allow-modals');
         iframe.setAttribute('loading', 'lazy');
+        iframe.setAttribute('allowfullscreen', 'true');
         
-        // Asegurarse de que no se puedan abrir ventanas emergentes
+        // Mantener los parámetros originales de la URL para evitar detección anti-iframe
         const currentSrc = iframe.src;
         if (currentSrc) {
             const url = new URL(currentSrc);
-            url.searchParams.set('popup', '0');
+            // Solo añadimos wmode transparent para mejorar la integración visual
             url.searchParams.set('wmode', 'transparent');
             iframe.src = url.toString();
         }
