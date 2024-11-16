@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <script type="module">
+        import AdBlocker from './adBlocker.js';
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PixelView - Detalles de Película</title>
@@ -22,16 +25,8 @@
     <div class="movie-detail-container">
         <main class="movie-content">
             <section class="video-section">
-                <div id="player-container">
-                    <video id="torrent-video" controls playsinline></video>
-                    <div id="player-overlay">
-                        <div class="loading-spinner"></div>
-                        <div id="status-info"></div>
-                        <div id="torrent-stats">
-                            <span id="download-speed"></span>
-                            <span id="peers-count"></span>
-                        </div>
-                    </div>
+                <div class="video-container">
+                    <!-- El contenido del video se insertará aquí mediante JavaScript -->
                 </div>
             </section>
 
@@ -60,6 +55,5 @@
     </div>
 
     <script type="module" src="movie-detail.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
 </body>
 </html>

@@ -16,12 +16,8 @@ const firebaseConfig = {
     measurementId: "G-4VPZX8PV0N"
 };
 
-// Inicializar Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-
-// Inicializar cliente WebTorrent
-const client = new WebTorrent();
 
 // Función para obtener el path del icono SVG
 function getIconPath(iconName) {
@@ -36,180 +32,6 @@ function getIconPath(iconName) {
         original: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>'
     };
     return icons[iconName] || icons.genre;
-}
-
-// Function to create video player elements
-function createPlayerElements() {
-    const playerContainer = document.getElementById('player-container');
-    if (!playerContainer) {
-        console.error('Player container not found');
-        return null;
-    }
-
-    // Clear existing content
-    playerContainer.innerHTML = `
-        <div id="player-overlay" class="player-overlay">
-            <div class="loading-spinner"></div>
-            <div id="status-info" class="status-info"></div>
-            <div id="torrent-stats" class="torrent-stats">
-                <span id="download-speed"></span>
-                <span id="peers-count"></span>
-            </div>
-        </div>
-        <video id="torrent-video" class="video-player" controls></video>
-    `;
-
-    return {
-        overlay: document.getElementById('player-overlay'),
-        statusInfo: document.getElementById('status-info'),
-        downloadSpeed: document.getElementById('download-speed'),
-        peersCount: document.getElementById('peers-count'),
-        video: document.getElementById('torrent-video')
-    };
-}
-
-// Función mejorada para inicializar el reproductor de WebTorrent
-function initializeTorrentPlayer(magnetUri) {
-    const elements = createPlayerElements();
-    if (!elements) {
-        console.error('Failed to create player elements');
-        return;
-    }
-
-    const { overlay, statusInfo, downloadSpeed, peersCount, video } = elements;
-    
-    // Show loading overlay
-    overlay.classList.add('visible');
-    statusInfo.textContent = 'Conectando al torrent...';
-
-    // Establecer un tiempo límite para la conexión inicial
-    const connectionTimeout = setTimeout(() => {
-        if (!client.torrents.length) {
-            statusInfo.textContent = 'Error: Tiempo de conexión agotado';
-            overlay.classList.add('visible');
-        }
-    }, 30000); // 30 segundos de timeout
-
-    // Destruir cualquier torrent anterior
-    if (client.torrents.length > 0) {
-        client.torrents.forEach(torrent => torrent.destroy());
-    }
-
-    let hasStartedPlaying = false;
-    let bufferingTimeout;
-
-    try {
-        client.add(magnetUri, function (torrent) {
-            clearTimeout(connectionTimeout);
-            
-            // Encontrar el archivo de video más grande en el torrent
-            const file = torrent.files.reduce((largest, file) => {
-                const isVideo = /\.(mp4|mkv|webm)$/i.test(file.name);
-                return isVideo && (!largest || file.length > largest.length) ? file : largest;
-            }, null);
-
-            if (!file) {
-                statusInfo.textContent = 'No se encontró archivo de video en el torrent';
-                return;
-            }
-
-            // Stream del archivo al reproductor de video
-            file.renderTo('#torrent-video');
-
-            // Configurar el buffer inicial
-            const INITIAL_BUFFER_SIZE = 5 * 1024 * 1024; // 5MB de buffer inicial
-            let initialBuffering = true;
-
-            // Actualizar estadísticas cada segundo
-            const statsInterval = setInterval(() => {
-                if (!torrent.client) {
-                    clearInterval(statsInterval);
-                    return;
-                }
-                
-                downloadSpeed.textContent = `↓ ${formatBytes(torrent.downloadSpeed)}/s`;
-                peersCount.textContent = `👥 ${torrent.numPeers} peers`;
-                
-                if (initialBuffering && torrent.downloaded >= INITIAL_BUFFER_SIZE) {
-                    initialBuffering = false;
-                    video.play().catch(console.error);
-                }
-                
-                if (torrent.numPeers === 0 && !hasStartedPlaying) {
-                    statusInfo.textContent = 'Buscando peers... Por favor espera.';
-                }
-            }, 1000);
-
-            // Video event handlers
-            video.addEventListener('playing', () => {
-                hasStartedPlaying = true;
-                overlay.classList.remove('visible');
-                clearTimeout(bufferingTimeout);
-            });
-
-            video.addEventListener('waiting', () => {
-                overlay.classList.add('visible');
-                statusInfo.textContent = 'Buffering...';
-                
-                clearTimeout(bufferingTimeout);
-                bufferingTimeout = setTimeout(() => {
-                    if (torrent.numPeers === 0) {
-                        statusInfo.textContent = 'No hay peers disponibles. Reintentando...';
-                        torrent.resume();
-                    }
-                }, 10000);
-            });
-
-            video.addEventListener('error', (e) => {
-                console.error('Video error:', e);
-                statusInfo.textContent = `Error en la reproducción: ${e.target.error.message}`;
-                overlay.classList.add('visible');
-            });
-
-            // Torrent event handlers
-            torrent.on('error', function (err) {
-                console.error('Error en el torrent:', err);
-                statusInfo.textContent = 'Error: ' + err.message;
-                overlay.classList.add('visible');
-            });
-
-            torrent.on('done', function () {
-                console.log('Descarga del torrent completa');
-                downloadSpeed.textContent = '✓ Descarga completa';
-                clearTimeout(bufferingTimeout);
-            });
-
-            torrent.on('close', function () {
-                clearInterval(statsInterval);
-                clearTimeout(bufferingTimeout);
-                video.src = '';
-            });
-
-            // Check download speed periodically
-            const speedCheckInterval = setInterval(() => {
-                if (torrent.downloadSpeed === 0 && hasStartedPlaying) {
-                    torrent.resume();
-                }
-                
-                if (!torrent.client) {
-                    clearInterval(speedCheckInterval);
-                }
-            }, 5000);
-        });
-    } catch (error) {
-        console.error('Error al inicializar el torrent:', error);
-        statusInfo.textContent = 'Error al inicializar el torrent';
-        overlay.classList.add('visible');
-        clearTimeout(connectionTimeout);
-    }
-}
-
-function formatBytes(bytes) {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 // Función para crear un elemento de metadato
@@ -286,7 +108,6 @@ async function getMoviePoster(originalTitle) {
     }
 }
 
-// Función principal para cargar los detalles de la película
 async function loadMovieDetails() {
     const urlParams = new URLSearchParams(window.location.search);
     const movieId = urlParams.get('id');
@@ -306,25 +127,12 @@ async function loadMovieDetails() {
 
         const movieData = movieDoc.data();
         
+        if (!movieData.originalTitle) {
+            console.warn('No se encontró el título original para la película:', movieData.title);
+        }
+        
         // Actualizar título
         document.getElementById('movieTitle').textContent = movieData.title;
-        
-        // Inicializar reproductor WebTorrent si hay videoUrl
-        if (movieData.videoUrl && typeof movieData.videoUrl === 'string') {
-            // Extraer magnet URI del videoUrl
-            const magnetUri = movieData.videoUrl.trim();
-            if (magnetUri.startsWith('magnet:')) {
-                initializeTorrentPlayer(magnetUri);
-            } else {
-                console.error('URL de video inválida:', magnetUri);
-                showError('Formato de video no soportado');
-            }
-        } else {
-            const videoContainer = document.querySelector('.video-container');
-            if (videoContainer) {
-                videoContainer.innerHTML = '<p>Video no disponible</p>';
-            }
-        }
         
         // Buscar información de TMDB
         const { posterUrl, movieId: tmdbId } = await getMoviePoster(movieData.originalTitle || movieData.title);
@@ -336,6 +144,14 @@ async function loadMovieDetails() {
             posterImage.onerror = () => {
                 posterImage.src = '/assets/placeholder.jpg';
             };
+        }
+
+        // Mostrar el video
+        const videoContainer = document.querySelector('.video-container');
+        if (videoContainer && movieData.videoUrl) {
+            videoContainer.innerHTML = movieData.videoUrl;
+        } else {
+            videoContainer.innerHTML = '<p>Video no disponible</p>';
         }
 
         // Obtener detalles adicionales de TMDB
@@ -351,7 +167,9 @@ async function loadMovieDetails() {
                     metadataContainer.innerHTML = `
                         <div class="metadata-section">
                             <h3>Información General</h3>
-                            ${createMetadataItem('Género', movieData.genere || 'No especificado', 'genre')}  ${movieData.duration ? createMetadataItem('Duración', movieData.duration, 'duration') : ''}
+                            ${createMetadataItem('Género', movieData.genere || 'No especificado', 'genre')}
+                            ${createMetadataItem('Tipo', movieData.type || 'No especificado', 'type')}
+                            ${movieData.duration ? createMetadataItem('Duración', movieData.duration, 'duration') : ''}
                             ${createMetadataItem('Estreno', new Date(tmdbDetails.release_date).toLocaleDateString('es-ES'), 'date')}
                             ${createMetadataItem('Calificación', `${tmdbDetails.vote_average.toFixed(1)}/10`, 'rating')}
                         </div>
@@ -461,12 +279,5 @@ function showError(message) {
     container.insertBefore(errorDiv, container.firstChild);
 }
 
-// Event listener para cuando el DOM esté listo
+// Inicializar cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', loadMovieDetails);
-
-// Event listener para limpiar los torrents cuando se cierra la página
-window.addEventListener('beforeunload', () => {
-    if (client && client.torrents.length > 0) {
-        client.torrents.forEach(torrent => torrent.destroy());
-    }
-});
