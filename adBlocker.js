@@ -41,6 +41,9 @@ const AdBlocker = {
         '[class*="outbrain"]'
     ],
 
+    // Reglas de bloqueo
+    blockRules: [],
+    
     // Configuración del sistema anti-popups
     popupConfig: {
         maxPopupsPerSecond: 0,
@@ -63,12 +66,82 @@ const AdBlocker = {
         isFirstUserInteraction: false
     },
 
-    init() {
+    async init() {
+        await this.loadBlockedRules();
         this.setupRequestInterception();
         this.removeAdsFromDOM();
         this.setupMutationObserver();
         this.initAggressivePopupBlocker();
-        console.log('Enhanced AdBlocker initialized with complete popup blocking');
+        console.log('Enhanced AdBlocker initialized with EasyList rules');
+    },
+
+    async loadBlockedRules() {
+        try {
+            const response = await fetch('/path/to/blocked.json');
+            const data = await response.json();
+            
+            // Procesar las reglas de bloqueo
+            this.blockRules = data.blockedUrls
+                .filter(rule => !rule.startsWith('!') && !rule.startsWith('['))
+                .map(rule => this.parseBlockRule(rule));
+
+            console.log(`Loaded ${this.blockRules.length} blocking rules`);
+        } catch (error) {
+            console.error('Error loading blocking rules:', error);
+        }
+    },
+
+    parseBlockRule(rule) {
+        // Eliminar comentarios inline si existen
+        rule = rule.split('!')[0].trim();
+
+        // Extraer los modificadores de dominio
+        const domainMatch = rule.match(/\$domain=([^,\s]+)/);
+        const excludedDomains = domainMatch ? 
+            domainMatch[1].split('|')
+                .filter(d => d.startsWith('~'))
+                .map(d => d.slice(1)) : [];
+
+        // Extraer el tipo de recurso
+        const typeMatch = rule.match(/\$(~?(?:image|script|stylesheet|xmlhttprequest|subdocument|third-party))/);
+        const resourceType = typeMatch ? typeMatch[1] : null;
+
+        // Convertir el patrón a expresión regular
+        let pattern = rule
+            .split('$')[0]                    
+            .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')  
+            .replace(/\\\*/g, '.*')           
+            .replace(/\\\^/g, '(?:[^\\w\\-.%]|$)');  
+
+        return {
+            pattern: new RegExp(pattern),
+            excludedDomains,
+            resourceType
+        };
+    },
+
+    shouldBlockRequest(url, type, domain) {
+        return this.blockRules.some(rule => {
+            // Verificar si el dominio está excluido
+            if (rule.excludedDomains.includes(domain)) {
+                return false;
+            }
+
+            // Verificar el tipo de recurso si está especificado
+            if (rule.resourceType && !this.matchesResourceType(type, rule.resourceType)) {
+                return false;
+            }
+
+            // Verificar el patrón de URL
+            return rule.pattern.test(url);
+        });
+    },
+
+    matchesResourceType(actualType, ruleType) {
+        if (ruleType.startsWith('~')) {
+            return actualType !== ruleType.slice(1);
+        }
+        return actualType === ruleType;
     },
 
     setupRequestInterception() {
@@ -77,13 +150,15 @@ const AdBlocker = {
             new URLPattern({ hostname: `*.${domain}` })
         );
 
-        // Interceptar las solicitudes de red
+        // Interceptar fetch
         const originalFetch = window.fetch;
         window.fetch = async (...args) => {
             const url = args[0] instanceof Request ? args[0].url : args[0];
+            const domain = new URL(url).hostname;
             
-            if (adPatterns.some(pattern => pattern.test(url))) {
-                console.log(`Blocked request to: ${url}`);
+            if (this.shouldBlockRequest(url, 'xmlhttprequest', domain) || 
+                adPatterns.some(pattern => pattern.test(url))) {
+                console.log(`Blocked fetch request to: ${url}`);
                 return new Response('', { status: 200 });
             }
             
@@ -94,8 +169,10 @@ const AdBlocker = {
         const originalXHROpen = XMLHttpRequest.prototype.open;
         XMLHttpRequest.prototype.open = function(...args) {
             const url = args[1];
+            const domain = new URL(url).hostname;
             
-            if (adPatterns.some(pattern => pattern.test(url))) {
+            if (AdBlocker.shouldBlockRequest(url, 'xmlhttprequest', domain) ||
+                adPatterns.some(pattern => pattern.test(url))) {
                 console.log(`Blocked XHR request to: ${url}`);
                 args[1] = 'about:blank';
             }
@@ -105,11 +182,32 @@ const AdBlocker = {
     },
 
     removeAdsFromDOM() {
-        // Eliminar elementos existentes que coincidan con los selectores
+        // Aplicar reglas CSS
+        const styleRules = this.blockRules
+            .filter(rule => !rule.resourceType || rule.resourceType === 'stylesheet')
+            .map(rule => rule.pattern.source)
+            .join(',\n');
+
+        if (styleRules) {
+            const style = document.createElement('style');
+            style.textContent = `${styleRules} { display: none !important; }`;
+            document.head.appendChild(style);
+        }
+
+        // Eliminar elementos existentes que coincidan con las reglas y selectores
         const elements = document.querySelectorAll(this.adSelectors.join(','));
         elements.forEach(element => {
             element.remove();
             console.log('Removed ad element:', element);
+        });
+
+        this.blockRules.forEach(rule => {
+            if (!rule.resourceType || rule.resourceType === 'stylesheet') {
+                document.querySelectorAll(rule.pattern.source).forEach(element => {
+                    element.remove();
+                    console.log('Removed element matching rule:', rule.pattern);
+                });
+            }
         });
 
         // Limpiar iframes sospechosos
@@ -330,22 +428,21 @@ const AdBlocker = {
                     if (document.activeElement === document.body) {
                         window.focus();
                     }
-                }, 0);
-            }, true);
-        });
-
-        // Mantener el foco en la ventana actual
-        setInterval(() => {
-            if (document.hasFocus() && window.opener) {
-                window.focus();
-            }
-        }, 500);
-    }
-};
-
-// Inicializar el bloqueador cuando el DOM esté listo
-document.addEventListener('DOMContentLoaded', () => {
-    AdBlocker.init();
-});
-
-export default AdBlocker;
+                }, 0)}, true);
+            });
+    
+            // Mantener el foco en la ventana actual
+            setInterval(() => {
+                if (document.hasFocus() && window.opener) {
+                    window.focus();
+                }
+            }, 500);
+        }
+    };
+    
+    // Inicializar el bloqueador cuando el DOM esté listo
+    document.addEventListener('DOMContentLoaded', () => {
+        AdBlocker.init();
+    });
+    
+    export default AdBlocker;
