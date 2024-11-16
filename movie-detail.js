@@ -1,5 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
 import { getFirestore, doc, getDoc, collection, query, where, limit, getDocs } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+import AdBlocker from './adBlocker.js';
 
 // Configuración de TMDB
 const TMDB_API_KEY = 'c68b3c5edd56efe86a36e35c4dc891fc';
@@ -47,26 +48,31 @@ function createMetadataItem(label, value, iconName) {
     `;
 }
 
-// Función para sanitizar y asegurar el iframe
+// Función mejorada para sanitizar y asegurar el iframe con protección contra anuncios
 function secureIframe(videoUrl) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(videoUrl, 'text/html');
     const iframe = doc.querySelector('iframe');
     
     if (iframe) {
+        // Verificar que la URL del iframe no sea de un dominio publicitario
+        const iframeSrc = iframe.src;
+        if (AdBlocker.adDomains.some(domain => iframeSrc.includes(domain))) {
+            console.log('Blocked ad iframe:', iframeSrc);
+            return '<p>Contenido bloqueado por seguridad</p>';
+        }
+
         // Añadir atributos de seguridad con permisos necesarios para reproducción
-        iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-presentation allow-popups-to-escape-sandbox allow-modals');
+        iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-presentation');
         iframe.setAttribute('loading', 'lazy');
         iframe.setAttribute('allowfullscreen', 'true');
         
-        // Mantener los parámetros originales de la URL para evitar detección anti-iframe
-        const currentSrc = iframe.src;
-        if (currentSrc) {
-            const url = new URL(currentSrc);
-            // Solo añadimos wmode transparent para mejorar la integración visual
-            url.searchParams.set('wmode', 'transparent');
-            iframe.src = url.toString();
-        }
+        // Mantener los parámetros originales de la URL
+        const url = new URL(iframe.src);
+        url.searchParams.set('wmode', 'transparent');
+        // Asegurar que usamos HTTPS
+        url.protocol = 'https:';
+        iframe.src = url.toString();
         
         return iframe.outerHTML;
     }
@@ -135,7 +141,11 @@ async function getMoviePoster(originalTitle) {
     }
 }
 
+// Función mejorada para cargar detalles de película con protección contra anuncios
 async function loadMovieDetails() {
+    // Inicializar AdBlocker antes de cargar el contenido
+    await AdBlocker.init();
+    
     const urlParams = new URLSearchParams(window.location.search);
     const movieId = urlParams.get('id');
     
@@ -154,26 +164,26 @@ async function loadMovieDetails() {
 
         const movieData = movieDoc.data();
         
-        if (!movieData.originalTitle) {
-            console.warn('No se encontró el título original para la película:', movieData.title);
+        // Actualizar título con protección XSS
+        const titleElement = document.getElementById('movieTitle');
+        if (titleElement) {
+            titleElement.textContent = movieData.title;
         }
-        
-        // Actualizar título
-        document.getElementById('movieTitle').textContent = movieData.title;
-        
+
         // Buscar información de TMDB
         const { posterUrl, movieId: tmdbId } = await getMoviePoster(movieData.originalTitle || movieData.title);
         
-        // Actualizar póster
+        // Actualizar póster con verificación de seguridad
         const posterImage = document.getElementById('moviePoster');
         if (posterImage) {
-            posterImage.src = posterUrl || '/assets/placeholder.jpg';
+            const securePosterUrl = posterUrl?.startsWith('https://') ? posterUrl : '/assets/placeholder.jpg';
+            posterImage.src = securePosterUrl;
             posterImage.onerror = () => {
                 posterImage.src = '/assets/placeholder.jpg';
             };
         }
 
-        // Mostrar el video con seguridad mejorada
+        // Mostrar el video con seguridad mejorada y protección contra anuncios
         const videoContainer = document.querySelector('.video-container');
         if (videoContainer && movieData.videoUrl) {
             videoContainer.innerHTML = secureIframe(movieData.videoUrl);
@@ -225,6 +235,30 @@ async function loadMovieDetails() {
 
         // Cargar películas recomendadas
         await loadRecommendedMovies(movieData.genere, movieId);
+
+        // Configurar observador de mutaciones para protección continua
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                mutation.addedNodes.forEach((node) => {
+                    if (node.nodeType === 1) { // Solo elementos
+                        // Verificar iframes añadidos dinámicamente
+                        const iframes = node.getElementsByTagName('iframe');
+                        Array.from(iframes).forEach(iframe => {
+                            if (AdBlocker.adDomains.some(domain => iframe.src?.includes(domain))) {
+                                iframe.remove();
+                                console.log('Removed dynamic ad iframe:', iframe.src);
+                            }
+                        });
+                    }
+                });
+            });
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
     } catch (error) {
         console.error("Error al cargar los detalles de la película:", error);
         showError("Ha ocurrido un error al cargar los detalles. Por favor, intenta de nuevo.");
@@ -285,7 +319,7 @@ async function loadRecommendedMovies(genre, currentMovieId) {
             }
 
             const recommendedSection = document.querySelector('.recommended-movies');
-            if (recommendedSection) {
+            if(recommendedSection) {
                 recommendedSection.style.display = 
                     recommendedContainer.children.length > 0 ? 'block' : 'none';
             }
@@ -308,3 +342,11 @@ function showError(message) {
 
 // Inicializar cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', loadMovieDetails);
+
+// Exportar funciones necesarias
+export {
+    loadMovieDetails,
+    getPosterUrl,
+    getMoviePoster,
+    showError
+};
