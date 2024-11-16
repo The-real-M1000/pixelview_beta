@@ -47,6 +47,32 @@ function createMetadataItem(label, value, iconName) {
     `;
 }
 
+// Función para sanitizar y asegurar el iframe
+function secureIframe(videoUrl) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(videoUrl, 'text/html');
+    const iframe = doc.querySelector('iframe');
+    
+    if (iframe) {
+        // Añadir atributos de seguridad
+        iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
+        iframe.setAttribute('loading', 'lazy');
+        
+        // Asegurarse de que no se puedan abrir ventanas emergentes
+        const currentSrc = iframe.src;
+        if (currentSrc) {
+            const url = new URL(currentSrc);
+            url.searchParams.set('popup', '0');
+            url.searchParams.set('wmode', 'transparent');
+            iframe.src = url.toString();
+        }
+        
+        return iframe.outerHTML;
+    }
+    
+    return '<p>Video no disponible</p>';
+}
+
 // Funciones TMDB
 async function searchMovie(originalTitle) {
     try {
@@ -146,10 +172,10 @@ async function loadMovieDetails() {
             };
         }
 
-        // Mostrar el video
+        // Mostrar el video con seguridad mejorada
         const videoContainer = document.querySelector('.video-container');
         if (videoContainer && movieData.videoUrl) {
-            videoContainer.innerHTML = movieData.videoUrl;
+            videoContainer.innerHTML = secureIframe(movieData.videoUrl);
         } else {
             videoContainer.innerHTML = '<p>Video no disponible</p>';
         }
